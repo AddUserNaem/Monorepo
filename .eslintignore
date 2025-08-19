@@ -1,0 +1,10 @@
+
+packages/eslint-config/**
+packages/tsconfig/**
+**/next.config.*
+
+
+**/.next/**
+**/dist/**
+**/build/**
+**/coverage/**
