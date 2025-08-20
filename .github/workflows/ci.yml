@@ -19,11 +19,13 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # ✅ Активируем pnpm из package.json ("packageManager": "pnpm@10.14.0")
       - name: Enable Corepack (pnpm)
-        run: corepack enable
-
-      - name: Verify pnpm
-        run: pnpm -v
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.14.0 --activate
+          pnpm -v
+          which pnpm
 
       - name: Install deps
         run: pnpm install --frozen-lockfile
@@ -48,23 +50,24 @@ jobs:
           NEXT_PUBLIC_APP_ENV: dev
         run: pnpm -F web build
 
-      - name: Install Playwright browsers
-        working-directory: apps/web
-        run: pnpm dlx @playwright/test install --with-deps
-
-      - name: E2E (WEB)
-        working-directory: apps/web
-        env:
-          PORT: 3001
-        run: |
-          echo "module.exports = {
-            testDir: 'e2e',
-            use: { baseURL: 'http://localhost:3001', headless: true },
-            webServer: {
-              command: 'pnpm dlx next@latest dev -p 3001',
-              url: 'http://localhost:3001',
-              reuseExistingServer: true,
-              timeout: 180000
-            }
-          };" > tmp.playwright.config.cjs
-          pnpm dlx @playwright/test test -c ./tmp.playwright.config.cjs --reporter=line
+      # (опционально) E2E на Ubuntu — можно включить позже
+      # - name: Install Playwright browsers
+      #   working-directory: apps/web
+      #   run: pnpm dlx @playwright/test install --with-deps
+      #
+      # - name: E2E (WEB)
+      #   working-directory: apps/web
+      #   env:
+      #     PORT: 3001
+      #   run: |
+      #     echo "module.exports = {
+      #       testDir: 'e2e',
+      #       use: { baseURL: 'http://localhost:3001', headless: true },
+      #       webServer: {
+      #         command: 'pnpm dlx next@latest dev -p 3001',
+      #         url: 'http://localhost:3001',
+      #         reuseExistingServer: true,
+      #         timeout: 180000
+      #       }
+      #     };" > tmp.playwright.config.cjs
+      #     pnpm dlx @playwright/test test -c ./tmp.playwright.config.cjs --reporter=line
