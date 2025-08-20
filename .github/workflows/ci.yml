@@ -59,11 +59,21 @@ jobs:
 
       - name: Start Next dev (background) and wait
         working-directory: apps/web
+        env:
+          NEXT_PUBLIC_APP_ENV: dev
+          PORT: 3001
         run: |
-          pnpm dlx next@latest dev -p 3001 > dev.log 2>&1 &
-          echo $! > dev.pid
-          pnpm dlx wait-on http://localhost:3001
+          set -e
+          PORT=3001 pnpm dev > dev.log 2>&1 & echo $! > dev.pid
+          # ждём 3 минуты, пингуем каждые 0.5 сек
+          pnpm dlx wait-on http-get://localhost:3001 --timeout 180000       --interval 500 || {
+            echo "----- NEXT DEV LOG TAIL (on wait timeout) -----"
+            tail -n 200 dev.log || true
+            exit 1
+          }
+          echo "Next is up on http://localhost:3001"
 
+      # 3) Гоним e2e без webServer
       - name: E2E (WEB)
         working-directory: apps/web
         run: |
@@ -73,7 +83,8 @@ jobs:
           };" > tmp.playwright.config.cjs
           pnpm dlx @playwright/test test -c ./tmp.playwright.config.cjs       --reporter=line
 
-      - name: Show Next logs (on failure) and stop server
+      # 4) Логи и стоп сервера — всегда
+      - name: Show Next logs and stop server
         if: always()
         working-directory: apps/web
         run: |
