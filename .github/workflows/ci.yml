@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      NEXT_PUBLIC_APP_ENV: dev
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app?schema=public
+      REDIS_URL: redis://localhost:6379
+      PORT: 4000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma db push
+        working-directory: apps/api
+        run: pnpm dlx prisma db push
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (API)
+        run: pnpm -F api test
+
+      - name: Unit tests (WEB)
+        run: pnpm -F web test
+
+      # E2E на Ubuntu — через dlx, без локальной установки
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: pnpm dlx @playwright/test install --with-deps
+
+      - name: E2E (WEB)
+        working-directory: apps/web
+        env:
+          PORT: 3001
+        run: |
+          echo 'export default {
+            testDir: "e2e",
+            use: { baseURL: "http://localhost:3001", headless: true },
+            webServer: {
+              command: "pnpm dlx next@latest dev -p 3001",
+              url: "http://localhost:3001",
+              reuseExistingServer: true,
+              timeout: 180000
+            }
+          }' > tmp.playwright.config.cjs
+          pnpm dlx @playwright/test test -c ./tmp.playwright.config.cjs --reporter=line
