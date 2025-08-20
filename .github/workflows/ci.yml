@@ -53,24 +53,30 @@ jobs:
         env:
           NEXT_PUBLIC_APP_ENV: dev
         run: pnpm -F web build
-
       - name: Install Playwright browsers
         working-directory: apps/web
         run: pnpm dlx @playwright/test install --with-deps
 
+      - name: Start Next dev (background) and wait
+        working-directory: apps/web
+        run: |
+          pnpm dlx next@latest dev -p 3001 > dev.log 2>&1 &
+          echo $! > dev.pid
+          pnpm dlx wait-on http://localhost:3001
+
       - name: E2E (WEB)
         working-directory: apps/web
-        env:
-          PORT: 3001
         run: |
           echo "module.exports = {
             testDir: 'e2e',
-            use: { baseURL: 'http://localhost:3001', headless: true },
-            webServer: {
-              command: 'pnpm dlx next@latest dev -p 3001',
-              url: 'http://localhost:3001',
-              reuseExistingServer: true,
-              timeout: 180000
-            }
+            use: { baseURL: 'http://localhost:3001', headless: true }
           };" > tmp.playwright.config.cjs
-          pnpm dlx @playwright/test test -c ./tmp.playwright.config.cjs --reporter=line
+          pnpm dlx @playwright/test test -c ./tmp.playwright.config.cjs       --reporter=line
+
+      - name: Show Next logs (on failure) and stop server
+        if: always()
+        working-directory: apps/web
+        run: |
+          echo "----- NEXT DEV LOG TAIL -----"
+          tail -n 200 dev.log || true
+          if [ -f dev.pid ]; then kill $(cat dev.pid) || true; fi
